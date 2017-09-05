@@ -8,11 +8,16 @@ package com.alivc.videochat.publisher;
 import android.content.Context;
 import android.media.AudioRecord;
 import android.media.audiofx.AcousticEchoCanceler;
+import android.os.Environment;
 import android.os.Process;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.alivc.videochat.utils.LogUtil;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 
 public class AudioPusher {
     private static final String TAG = "AudioPusher0927";
@@ -153,28 +158,51 @@ public class AudioPusher {
             } catch (Exception var8) {
                 Log.e("AudioPusher0927", "Set record thread priority failed: " + var8.getMessage());
             }
+            FileInputStream fileInputStreamFromFile = getFileInputStreamFromFile(Environment.getExternalStorageDirectory() + "/Decode/123456.pcm");
 
             byte[] buffer = new byte[AudioPusher.this.mFrameSize];
+            byte[] pcmBuffer = new byte[AudioPusher.this.mFrameSize];
             long time = System.currentTimeMillis();
             long startTime = time;
             int count = 0;
 
             while (AudioPusher.this.mPusherRuning && AudioPusher.this.audioRecord.getRecordingState() == 3) {
-                int len = AudioPusher.this.audioRecord.read(buffer, 0, buffer.length);
-                ++count;
-                Log.d("AudioPusher0927", "audio: on audio " + len + " time : " + (System.currentTimeMillis() - time) + "average time : " + (System.currentTimeMillis() - startTime) / (long) count);
-                time = System.currentTimeMillis();
-                if (0 < len && (AudioPusher.this.mStatus != Status.PAUSED || !AudioPusher.this.isTelephonyCalling())) {
-                    if (AudioPusher.this.mMute) {
-                        if (AudioPusher.this.mAudioSourceListener != null) {
-                            AudioPusher.this.mAudioSourceListener.onAudioFrame(AudioPusher.this.mMuteData, AudioPusher.this.mFrameSize);
+                try {
+                    int len = AudioPusher.this.audioRecord.read(buffer, 0, buffer.length);
+                    int read = fileInputStreamFromFile.read(pcmBuffer);
+                    ++count;
+                    Log.d("AudioPusher0927", "audio: on audio " + len + " time : " + (System.currentTimeMillis() - time) + "average time : " + (System.currentTimeMillis() - startTime) / (long) count);
+                    time = System.currentTimeMillis();
+                    if (0 < len && (AudioPusher.this.mStatus != Status.PAUSED || !AudioPusher.this.isTelephonyCalling())) {
+                        if (AudioPusher.this.mMute) {
+                            if (AudioPusher.this.mAudioSourceListener != null) {
+                                AudioPusher.this.mAudioSourceListener.onAudioFrame(AudioPusher.this.mMuteData, AudioPusher.this.mFrameSize);
+                            }
+                        } else if (AudioPusher.this.mAudioSourceListener != null) {
+                            //  测试一
+//                            if (read != -1) {
+//                                System.out.println("9527LEN: " + len);
+//                                AudioPusher.this.mAudioSourceListener.onAudioFrame(pcmBuffer, read);
+//                            } else {
+//                                AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
+//                            }
+                            // 测试二
+//                            for (int i = 0; i < buffer.length; i++) {
+//                                buffer[i] = (byte) (buffer[i] * 1.8f);
+//                            }
+//                            AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
+                            // 测试三
+                            for (int i = 0; i < buffer.length; i++) {
+                                buffer[i] = (byte) (pcmBuffer[i] * 0.2f + buffer[i] * 1.8f);
+                            }
+                            AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
                         }
-                    } else if (AudioPusher.this.mAudioSourceListener != null) {
-                        System.out.println("9527LEN: " + len);
-                        AudioPusher.this.mAudioSourceListener.onAudioFrame(AudioPusher.this.mMuteData, AudioPusher.this.mFrameSize);
                     }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
+            fileInputStreamFromFile = null;
 
             Log.e("AudioPusher0927", "exist debug.");
         }
@@ -182,5 +210,19 @@ public class AudioPusher {
 
     public interface AudioSourceListener {
         void onAudioFrame(byte[] var1, int var2);
+    }
+
+    private static FileInputStream getFileInputStreamFromFile(String fileUrl) {
+        FileInputStream fileInputStream = null;
+
+        try {
+            File file = new File(fileUrl);
+
+            fileInputStream = new FileInputStream(file);
+        } catch (Exception e) {
+            System.out.println("GetBufferedInputStreamFromFile异常");
+        }
+
+        return fileInputStream;
     }
 }
