@@ -56,6 +56,7 @@ public class AudioPusher {
                 this.minBufferSize = this.mFrameSize;
             }
 
+            // 参数一为MIC 参数二由setRecordParams方法设定（默认32000） 参数三双声道 参数四
             this.audioRecord = new AudioRecord(1, this.mSampleRateInHz, 12, 2, this.minBufferSize * 10);
             this.mStatus = Status.RUNNING;
             this.mPusherRuning = true;
