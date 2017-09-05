@@ -6,7 +6,9 @@
 package com.alivc.videochat.publisher;
 
 import android.content.Context;
+import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioTrack;
 import android.media.audiofx.AcousticEchoCanceler;
 import android.os.Environment;
 import android.os.Process;
@@ -18,6 +20,7 @@ import com.alivc.videochat.utils.LogUtil;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.LinkedList;
 
 public class AudioPusher {
     private static final String TAG = "AudioPusher0927";
@@ -32,6 +35,10 @@ public class AudioPusher {
     private Context mContext;
     private byte[] mMuteData = null;
     private int mFrameSize;
+    private AudioTrack mPlayPCMTool;
+    private LinkedList<byte[]> mListByte;
+    private byte[] mPlayByte;
+    private boolean mThreadRoutineIsContinue;
 
     public AudioPusher(Context context) {
         LogUtil.d("AudioPusher0927", "new AudioPusher.");
@@ -63,6 +70,21 @@ public class AudioPusher {
 
             // 参数一为MIC 参数二由setRecordParams方法设定（默认32000） 参数三双声道 参数四
             this.audioRecord = new AudioRecord(1, this.mSampleRateInHz, 12, 2, this.minBufferSize * 10);
+
+            // AudioTrack 得到播放最小缓冲区的大小
+            int mPlayMinBufferSize = AudioTrack.getMinBufferSize(this.mSampleRateInHz, 12, 2);
+            // 实例化播放音频对象
+            mPlayPCMTool = new AudioTrack(AudioManager.STREAM_MUSIC, this.mSampleRateInHz, 12, 2, mPlayMinBufferSize, AudioTrack.MODE_STREAM);
+
+            // 实例化一个链表，用来存放字节组数
+            mListByte = new LinkedList<>();
+
+            // --------------------------------------------------------------------------------------------------------
+
+            // 实例化一个长度为播放最小缓冲大小的字节数组
+            mPlayByte = new byte[mPlayMinBufferSize];
+
+
             this.mStatus = Status.RUNNING;
             this.mPusherRuning = true;
             if (this.audioRecord.getRecordingState() == 1) {
@@ -72,7 +94,10 @@ public class AudioPusher {
                     throw new PublisherException("audio record read fail");
                 }
 
+                mThreadRoutineIsContinue = true;
+
                 (new Thread(new AudioPusher.AudioRecordTask())).start();
+                (new Thread(new PlayPCM())).start();
             }
 
         }
@@ -106,6 +131,7 @@ public class AudioPusher {
                 this.mPusherRuning = false;
                 if (this.audioRecord.getRecordingState() == 3) {
                     this.audioRecord.stop();
+                    mThreadRoutineIsContinue = false;
                 }
             }
 
@@ -162,6 +188,7 @@ public class AudioPusher {
 
             byte[] buffer = new byte[AudioPusher.this.mFrameSize];
             byte[] pcmBuffer = new byte[AudioPusher.this.mFrameSize];
+            byte[] collectMiddleBytes;
             long time = System.currentTimeMillis();
             long startTime = time;
             int count = 0;
@@ -197,6 +224,11 @@ public class AudioPusher {
                                     buffer[i] = (byte) (pcmBuffer[i] * 0.9f + buffer[i] * 1.8f);
                                 }
                             }
+                            collectMiddleBytes = buffer.clone();
+                            if (mListByte.size() >= 2) {
+                                mListByte.removeFirst();
+                            }
+                            mListByte.add(collectMiddleBytes);
                             AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
                         }
                     }
@@ -226,5 +258,24 @@ public class AudioPusher {
         }
 
         return fileInputStream;
+    }
+
+    private class PlayPCM implements Runnable {
+        @Override
+        public void run() {
+            byte[] playMiddle;
+            // 开始播放
+            mPlayPCMTool.play();
+
+            while (mThreadRoutineIsContinue) {
+                try {
+                    mPlayByte = mListByte.getFirst();
+                    playMiddle = mPlayByte.clone();
+                    mPlayPCMTool.write(playMiddle, 0, playMiddle.length);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 }
