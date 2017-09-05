@@ -192,8 +192,10 @@ public class AudioPusher {
 //                            }
 //                            AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
                             // 测试三
-                            for (int i = 0; i < buffer.length; i++) {
-                                buffer[i] = (byte) (pcmBuffer[i] * 0.2f + buffer[i] * 1.8f);
+                            if (read != -1) {
+                                for (int i = 0; i < buffer.length; i++) {
+                                    buffer[i] = (byte) (pcmBuffer[i] * 0.9f + buffer[i] * 1.8f);
+                                }
                             }
                             AudioPusher.this.mAudioSourceListener.onAudioFrame(buffer, len);
                         }
